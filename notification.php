@@ -21,14 +21,31 @@ if (mysqli_connect_errno()) {
 $builder = array("Processing Date", "MID","Merchant-Name","Tran-type","tran-identifier","amount","case-number","card-type","dbcr-indicator","reason-code","reason-desc","record-type","auth-code","card-number","reference-number","bin-ica","transaction-date","acquirer-reference");
 
 //setup sql to grab needed information
-$sql = 'select * from druporta_tss_data.notifications where notified != true';
+//
+
+
+
+
+
+//CHANGE THIS BACK TO WORK
+//$sql = 'select * from druporta_tss_data.notifications where notified != 0';
+
+
+
+
+
+
+//
+$sql = 'select * from druporta_tss_data.notifications where notified != 0';
 $profile = mysqli_query($mariadb, "select * from druporta_tss_data.mrchprofile");
-$result=mysqli_query($mariadb,$sql);
+$result=mysqli_query($mariadb, $sql);
 $notification = mysqli_fetch_all($result, MYSQLI_BOTH);
 $result2 = mysqli_query($mariadb, 'SHOW COLUMNS FROM chargebacks') or die('cannot show columns from '.$table);
 $tableHeader = mysqli_fetch_all($result2, MYSQLI_BOTH);
 $mrchprofile = mysqli_fetch_all($profile, MYSQLI_BOTH);
 $count = 0;
+mysqli_free_result($result);
+mysqli_free_result($profile);
 
 //build table variables for getting information
 $table = "notifications";
@@ -108,38 +125,38 @@ $chargebackCodes= array(
                   "7030"=>"FRAUD CARD NOT PRESENT TRANSACTION",
                   "4754"=>"FRAUD NON RESPONSE TO A TICKET RETRIEVAL REQUEST"),
 "Amex"=>array(
-		  "A01"=>"CHARGE AMOUNT EXCEEDS AUTH. AMOUNT",
-		  "A02"=>"NO VALID AUTH.",
-		  "A08"=>"AUTH. APPROVAL EXPIRED",
-		  "C02"=>"CREDIT NOT PROCESSED",
-		  "C04"=>"GOODS/SERVICES RETURNED/REFUSED",
-		  "C05"=>"GOODS/SERVICES CANCELLED",
-		  "C08"=>"GOODS/SERVICES NOT RECEIVED/ONLY PARTIALLY RECEIVED",
-		  "C14"=>"PAID BY OTHER MEANS",
-		  "C18"=>"NO SHOW/ CARDEPOSIT CANCELLED",
-		  "C28"=>"CANCELLED RECURRING BILLING",
-		  "C31"=>"GOODS/SERVICES NOT AS DESCRIBED",
-		  "C32"=>"GOODS/SERVICES DAMAGED/DEFECTIVE",
-		  "F10"=>"MISSING IMPRINT",
-		  "F14"=>"MISSING SIGNATURE",
-		  "F24"=>"NO CARD MEMBER AUTH.",
-		  "F29"=>"CARD NOT PRESENT",
-		  "F30"=>"EMV-COUNTERFEIT",
-		  "F31"=>"LOST/STOLEN",
-		  "R03"=>"INSUFFICIENT REPLY",
-		  "R13"=>"NO REPLY",
-		  "M01"=>"CHARGEBACK AUTH.",
-		  "P01"=>"UNASSIGNED CARD NUMBER",
-		  "P03"=>"CREDIT PROCESSED AS CHARGE",
-		  "P04"=>"CHARGE PROCESSED AS CREDIT",
-		  "P05"=>"INCORRECT CHARGE AMOUNT",
-		  "P07"=>"LATE SUBMISSION",
-		  "P08"=>"DUPLICATE CHARGE",
-		  "P22"=>"NON-MATCHING ACCOUNT NUMBER",
-		  "P23"=>"CURRENT DISCREPANCY",
-		  "FR2"=>"FRAUD FULL RECOURSE PROGRAM",
-		  "FR4"=>"IMMEDIATE CHARGEBACK PROGRAM",
-	     "FR6"=>"PARTIAL IMMEDIATE CHARGEBACK PROGRAM"
+          "A01"=>"CHARGE AMOUNT EXCEEDS AUTH. AMOUNT",
+          "A02"=>"NO VALID AUTH.",
+          "A08"=>"AUTH. APPROVAL EXPIRED",
+          "C02"=>"CREDIT NOT PROCESSED",
+          "C04"=>"GOODS/SERVICES RETURNED/REFUSED",
+          "C05"=>"GOODS/SERVICES CANCELLED",
+          "C08"=>"GOODS/SERVICES NOT RECEIVED/ONLY PARTIALLY RECEIVED",
+          "C14"=>"PAID BY OTHER MEANS",
+          "C18"=>"NO SHOW/ CARDEPOSIT CANCELLED",
+          "C28"=>"CANCELLED RECURRING BILLING",
+          "C31"=>"GOODS/SERVICES NOT AS DESCRIBED",
+          "C32"=>"GOODS/SERVICES DAMAGED/DEFECTIVE",
+          "F10"=>"MISSING IMPRINT",
+          "F14"=>"MISSING SIGNATURE",
+          "F24"=>"NO CARD MEMBER AUTH.",
+          "F29"=>"CARD NOT PRESENT",
+          "F30"=>"EMV-COUNTERFEIT",
+          "F31"=>"LOST/STOLEN",
+          "R03"=>"INSUFFICIENT REPLY",
+          "R13"=>"NO REPLY",
+          "M01"=>"CHARGEBACK AUTH.",
+          "P01"=>"UNASSIGNED CARD NUMBER",
+          "P03"=>"CREDIT PROCESSED AS CHARGE",
+          "P04"=>"CHARGE PROCESSED AS CREDIT",
+          "P05"=>"INCORRECT CHARGE AMOUNT",
+          "P07"=>"LATE SUBMISSION",
+          "P08"=>"DUPLICATE CHARGE",
+          "P22"=>"NON-MATCHING ACCOUNT NUMBER",
+          "P23"=>"CURRENT DISCREPANCY",
+          "FR2"=>"FRAUD FULL RECOURSE PROGRAM",
+          "FR4"=>"IMMEDIATE CHARGEBACK PROGRAM",
+         "FR6"=>"PARTIAL IMMEDIATE CHARGEBACK PROGRAM"
 ),
 "RecCode"=>array(
                   "1"=>"VISA PENDING CB",
@@ -150,36 +167,73 @@ $chargebackCodes= array(
                   "25"=>"MASTERCARD MERCHANT REPRESENTMENT")
 );
 
+function rubybuild($merchant, $reason, $notify)
+{
+    //print "Made it";
+    $merchant['street'] = str_replace($invalid_characters, " ", $merchant['street']);
+    $buildRuby ='"'.trim($reason[7]).','.$reason[5].','.$merchant['merchant-name'].','.$merchant['street'].','.$merchant['city'].','.$merchant['state'].','.$merchant['zip'].','.$reason[5].','.$reason[5].','.$reason[11].','.$chargebackCodes[$reason[7]][$reason[9]].','.''.','.$reason[16].','.$reason[13].','.$reason[5].','.$reason[17].','.''.','.$reason[14].','.$reason[11].'"';
+    //print_r($reason);
+    $time = DateTime::createFromFormat('Y-j-m', (string)$reason[16]);
+    //echo $time -> format('Y-m-d');
+    shell_exec('ruby pdfAddition.rb '.$notify[MID].' '.$buildRuby);
+    shell_exec('drive push -no-prompt -destination chargebackPDF chargebackPDF/'.$notify[MID].'/'.$year.'/'.$month.'/card'.$reason[13].'reference'.$reason[17].'.pdf');
+    $year = $time-> format('Y');
+    $month = $time-> format('F');
+    chdir('chargebackPDF');
+    //print 'chargebackPDF/'.$notify[MID].'/'.$year.'/'.$month.'/card'.$reason[13].'reference'.$reason[17].'.pdf\n';
+    $url = shell_exec('drive url chargebackPDF/'.$notify[MID].'/'.$year.'/'.$month.'/card'.$reason[13].'reference'.$reason[17].'.pdf');
+    shell_exec('drive share -with-link chargebackPDF/'.$notify[MID].'/'.$year.'/'.$month.'/card'.$reason[13].'reference'.$reason[17].'.pdf');
+    chdir('../');
+    $url = explode(" ", $url);
+    //$updateQueary = 'update notifications set url="'.trim($url[1]).'", notified="1" where MID like "'.trim($notify[MID]).'" and block like  "%'.$reason[13]."%".$reason[17].'%"';
+    $updateQueary = 'select * from notifications where MID like "'.trim($notify[MID]).'" and block like  "%'.$reason[13]."%".$reason[17].'%"';
+    if(mysqli_query($mariadb, $updateQueary)=== TRUE){
+      echo "notification set and url created";
+    }else{
+      //echo $updateQueary;
+      echo "Failed to update";
+    }
+    //print($url[1]);
+    return $url[1];
+}
 //build an array to hold all notifications for multiple notifications per merchant, so they get a table instead of a ton of emails
 $simpleArray=array();
 $email= array();
 $i=0;
 
 chdir('pdfParser');
-echo "My current dir is".getcwd();
-foreach( $notification as $notify ) {
-  $merchant ="";
-  //print_r($notify);
-  $reason = explode(",",$notify[block]);
-  foreach($mrchprofile as $mrch){
-    if(array_search($notify[MID], $mrch)){
-      $merchant = $mrch;
-      print_r($merchant);
-      break;
+//echo "My current dir is".getcwd();
+foreach ($notification as $notify) {
+    $merchant ="";
+  print_r($notify);
+  $reason = explode(",", $notify[block]);
+    print_r($reason);
+    foreach ($mrchprofile as $mrch) {
+        if (array_search($notify[MID], $mrch)) {
+            $merchant = $mrch;
+            break;
+        }
     }
-  }
-  if(in_array($notify[MID], $simpleArray)){
-    array_push($simpleArray[$notify[MID]][$i], $reason);
-    $i++;
-  }
-  else{
-    $email[$notify[email]] = $notify[MID];
-    $simpleArray[$notify[MID]][$i] = $reason;
-    $i++;}
-  $merchant['street'] = str_replace($invalid_characters, " ", $merchant['street']);
-  $buildRuby = '"'.$reason[7].'","'.$reason[5].'","'.$merchant['merchant-name'].'","'.$merchant['street'].'","'.$merchant['city'].'","'.$merchant['state'].'","'.$merchant['zip'].'","'.$reason[5].'","'.$reason[5].'","'.$reason[11].'","'.$chargebackCodes[$reason[7]][$reason[9]].'","'.''.'","'.$reason[sizeof($reason)-2].'","'.$reason[13].'","'.$reason[5].'","'.$reason[sizeof($reason)-1].'","'.''.'","'.$reason[4].'","'.$reason[11].'"';
-  echo $buildRuby;
-  shell_exec('ruby pdfAddition.rb '.$buildRuby);
+    if (in_array($notify[MID], $simpleArray)) {
+        //print "\nThis is the url\n".$url;
+        if(count($reason) > 1){
+          $url = rubybuild($merchant, $reason, $notify);
+          array_push($reason, $url);
+          //print_r($reason);
+        }
+        array_push($simpleArray[$notify[MID]][$i], $reason);
+        $i++;
+    } else {
+        $email[$notify[email]] = $notify[MID];
+        //print "\nThis is the url for new email\n".$url;
+        if(count($reason) > 1){
+          $url = rubybuild($merchant, $reason, $notify);
+          array_push($reason, $url);
+          //print_r($reason);
+        }
+        $simpleArray[$notify[MID]][$i] = $reason;
+        $i++;
+    }
 }$i=0;
 
 //print_r($email);
@@ -192,7 +246,7 @@ foreach( $notification as $notify ) {
 
 echo "Going to add things to mail.";
 
-foreach( $simpleArray as $notify ) {
+foreach ($simpleArray as $notify) {
 
   //setup interactive bootstrap email enviorment for email compatability across browsers
 
@@ -200,11 +254,11 @@ foreach( $simpleArray as $notify ) {
 
   $body='<!DOCTYPE html><meta name="viewport" content="width=device-width, initial-scale=1"><html lang="eng"><body><!-- Latest compiled and minified CSS -->
 
-<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css" integrity="sha384-BVYiiSIFeK1dGmJRAkycuHAHRg32OmUcww7on3RYdg4Va+PmSTsz/K68vbdEjh4u" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css" integrity="sha384-BVYiiSIFeK1dGmJRAkycuHAHRg32OmUcww7on3RYdg4Va+PmSTsz/K68vbdEjh4u" crossorigin="anonymous">
 
-<!-- Optional theme -->
+  <!-- Optional theme -->
 
-<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap-theme.min.css" integrity="sha384-rHyoN1iRsVXV4nD0JutlnGaslCJuC7uwjduW9SVrLvRYooPp2bWYgmgJQIXwl/Sp" crossorigin="anonymous">';
+  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap-theme.min.css" integrity="sha384-rHyoN1iRsVXV4nD0JutlnGaslCJuC7uwjduW9SVrLvRYooPp2bWYgmgJQIXwl/Sp" crossorigin="anonymous">';
 
   $body.="<h3>Dispute Notification(s) ".date('m/d/Y')."</h3>";//ADD mid here later
 
@@ -212,122 +266,89 @@ foreach( $simpleArray as $notify ) {
 
   //Build class for mysql rows table and grab headers from chargebacks
 
-  if(mysqli_num_rows($result2)) {
+  if (mysqli_num_rows($result2)) {
+      $body.='<div class="table-responsive">';
 
-    $body.='<div class="table-responsive">';
+      $body.= '<table cellpadding="0" cellspacing="0" class="db-table, table, table-striped, table-condensed" style="width:100%;  border: 1px solid black;">';
 
-  	$body.= '<table cellpadding="0" cellspacing="0" class="db-table, table, table-striped, table-condensed" style="width:100%;  border: 1px solid black;">';
+      $body.='<tr style="border: 1px solid black; text-align:center;">';
 
-		$body.='<tr style="border: 1px solid black; text-align:center;">';
-
-    foreach ($tableHeader as $key => $value) {
-
-      if ($value[Field] == "acquirer-reference"){
-
-        next($tableHeader);
-
-      }
-
-      else{
-
-        $body.='<td style="border: 1px solid black;">'.ucwords(str_replace('-', ' ',$value[Field])).'</td>';}
-
-    }
-
-		$body.='</tr>';
-
-
-
-    foreach($notify as $value){
-
-      $body.='<tr style="border: 1px solid black;text-align:center;">';
-
-      //Get chargeback code for table convert
-
-      $creditDefinition = $chargebackCodes[$value[7]][$value[9]];
-
-      $recordType = $chargebackCodes['RecCode'][$value[11]];
-
-      //get MID for merchant email name
-
-      $MID=$value[1];
-
-      //Flip me on to tell merchants-------------------------------------------------------------------------------------------------------------------
-
-      //$to=email[$value[1]];
-
-      echo "This is my mid for stuff: ".$MID;
-
-      //insert period into amount for money conversion
-
-      $partOne = substr($value[5],0, strlen($value[5])-2);
-
-      $partTwo = substr($value[5],strlen($value[5])-2, strlen($value[5]));
-
-      $money = $partOne.".".$partTwo;
-
-      $money= floatval($money);
-
-      //build table for the republic
-
-      foreach(array_slice($value, 0,-1) as $key=>$cell) {
-
-          if($cell == $value[9]){
-
-            //Change definition for reason code to understandable change
-
-    			  $body.= '<td style="border: 1px solid black;">'.$cell.'-'.$creditDefinition.'</td>';
-
-          }elseif ($cell == $value[5]) {
-
-            $body.= '<td style="border: 1px solid black;">'.money_format('%i',$money).'</td>';
-
-          }elseif ($cell == $value[11]) {
-
-            $body.= '<td style="border: 1px solid black;">'.$cell.'-'.$recordType.'</td>';
-
-          }else{
-
-    			$body.= '<td style="border: 1px solid black;">'.$cell.'</td>';
-
+      foreach ($tableHeader as $key => $value) {
+          if ($value[Field] == "acquirer-reference") {
+              next($tableHeader);
+          } else {
+              $body.='<td style="border: 1px solid black;">'.ucwords(str_replace('-', ' ', $value[Field])).'</td>';
           }
+      }
+      $body.='<td style="border: 1px solid black;">'.ucwords('PDF').'</td>';
 
-  		}
+      $body.='</tr>';
 
-      $body.= '</tr>';
+        foreach ($notify as $value) {
+            $body.='<tr style="border: 1px solid black;text-align:center;">';
+            //Get chargeback code for table convert
+            $creditDefinition = $chargebackCodes[$value[7]][$value[9]];
+            $recordType = $chargebackCodes['RecCode'][$value[11]];
+            //get MID for merchant email name
+            $MID=$value[1];
+            //Flip me on to tell merchants-------------------------------------------------------------------------------------------------------------------
+            //$to=email[$value[1]];
+            echo "This is my mid for stuff: ".$MID;
+            //insert period into amount for money conversion
+            $partOne = substr($value[5], 0, strlen($value[5])-2);
+            $partTwo = substr($value[5], strlen($value[5])-2, strlen($value[5]));
+            $money = $partOne.".".$partTwo;
+            $money= floatval($money);
+            //build table for the republic
+            if(empty($value[18])){
+              echo "its missing a message. inserting blank";
+              $value[18] = TRUE;
+            }
+            if(empty($value[19])){
+              echo "its missing a url. inserting blank";
+              $value[19] = TRUE;
+            }
+            foreach (array_slice($value, 0, -1) as $key=>$cell) {
+                if ($cell == $value[9]) {
+                  //Change definition for reason code to understandable change
+                  $body.= '<td style="border: 1px solid black;">'.trim($cell).'-'.trim($creditDefinition).'</td>';
+                } elseif ($cell == $value[5]) {
+                    $body.= '<td style="border: 1px solid black;">'.money_format('%i', $money).'</td>';
+                } elseif ($cell == $value[11]) {
+                    $body.= '<td style="border: 1px solid black;">'.trim($cell).'-'.trim($recordType).'</td>';
+                } else {
+                    $body.= '<td style="border: 1px solid black;">'.trim($cell).'</td>';
+                }
+                if($cell){
+                  $body.= '<td style="border: 1px solid black;">'.'</td>';
+                }
+            }
 
+                $body.= '</tr>';
+            }
+
+      $body.= '</table><br />';
+
+      $body.='</div>';
+
+      $body.= '<p>For further information about this Dispute Notification please go to <a href="http://dashboard.paymentportal.us">http://dashboard.paymentportal.us</a></p><br />';
+  }
+
+  mysqli_free_result($result2);
+
+    $body.='</body></html>';
+
+    echo "Grabbed new people to notify \r\n";
+
+    if (mail($to, $subject.$MID, $body, $headers)) {
+        echo("<p>Email successfully sent!<p>");
+    } else {
+        echo("<p> Filed delivery");
     }
 
-  	$body.= '</table><br />';
-
-    $body.='</div>';
-
-  	$body.= '<p>For further information about this Dispute Notification please go to <a href="http://dashboard.paymentportal.us">http://dashboard.paymentportal.us</a></p><br />';
-
-  }
-
-  $body.='</body></html>';
-
-  echo "Grabbed new people to notify \r\n";
-
-  if(mail ($to, $subject.$MID, $body, $headers)){
-
-    echo ("<p>Email successfully sent!<p>");
-
-  }
-
-  else {
-
-    echo ("<p> Filed delivery");
-
-  }
-
-  $count++;
-
+    $count++;
 }
 
 mysqli_free_result($result);
 
 mysqli_close($mariadb);
-
-?>
