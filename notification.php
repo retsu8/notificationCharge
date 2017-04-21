@@ -1,9 +1,14 @@
 <?php
 //Connect to database for cahrgebacks
-$mariadb = new mysqli("127.0.0.1", "druportal", "5v\"Z2.'J&F3aL^.&vOX", "druporta_tss_data");
+$mariadb = new mysqli("merchdb.c0v9kpl8n2zi.us-west-2.rds.amazonaws.com", "merch_admin", "T7ToogA#36u#UWbV", "druporta_tss_data");
+if ($mariadb->connect_error) {
+    echo "Failed to connect to MySQL: (" . $mariadb->connect_errno . ") " . $mariadb->connect_error;
+}
+
+mysqli_ssl_set($mariadb, NULL,"certs.pem","certs.pem",NULL,NULL);
 
 //setup variables for messaging
-$to = "wjp@frontlineprocessing.com";
+$to = "it-poc@frontlineprocessing.com";
 $subject = "Dispute Notification(s) ".date('m/d/Y')." - MID:";
 $body = "";
 $headers = "From: donotreply@frontlineprocessing.com\r\n";
@@ -36,7 +41,7 @@ $builder = array("Processing Date", "MID","Merchant-Name","Tran-type","tran-iden
 
 
 //
-$sql = 'select * from druporta_tss_data.notifications where notified != 0';
+$sql = 'select * from druporta_tss_data.notifications where `notified` != 1';
 $profile = mysqli_query($mariadb, "select * from druporta_tss_data.mrchprofile");
 $result=mysqli_query($mariadb, $sql);
 $notification = mysqli_fetch_all($result, MYSQLI_BOTH);
@@ -187,10 +192,10 @@ function rubybuild($merchant, $reason, $notify)
     $url = explode(" ", $url);
     //$updateQueary = 'update notifications set url="'.trim($url[1]).'", notified="1" where MID like "'.trim($notify[MID]).'" and block like  "%'.$reason[13]."%".$reason[17].'%"';
     $updateQueary = 'select * from notifications where MID like "'.trim($notify[MID]).'" and block like  "%'.$reason[13]."%".$reason[17].'%"';
-    if(mysqli_query($mariadb, $updateQueary)=== TRUE){
-      echo "notification set and url created";
-    }else{
-      //echo $updateQueary;
+    if (mysqli_query($mariadb, $updateQueary)=== true) {
+        echo "notification set and url created";
+    } else {
+        //echo $updateQueary;
       echo "Failed to update";
     }
     //print($url[1]);
@@ -205,9 +210,9 @@ chdir('pdfParser');
 //echo "My current dir is".getcwd();
 foreach ($notification as $notify) {
     $merchant ="";
-  print_r($notify);
+  //print_r($notify);
   $reason = explode(",", $notify[block]);
-    print_r($reason);
+    //print_r($reason);
     foreach ($mrchprofile as $mrch) {
         if (array_search($notify[MID], $mrch)) {
             $merchant = $mrch;
@@ -216,9 +221,9 @@ foreach ($notification as $notify) {
     }
     if (in_array($notify[MID], $simpleArray)) {
         //print "\nThis is the url\n".$url;
-        if(count($reason) > 1){
-          $url = rubybuild($merchant, $reason, $notify);
-          array_push($reason, $url);
+        if (count($reason) > 1) {
+            $url = rubybuild($merchant, $reason, $notify);
+            array_push($reason, $url);
           //print_r($reason);
         }
         array_push($simpleArray[$notify[MID]][$i], $reason);
@@ -226,9 +231,9 @@ foreach ($notification as $notify) {
     } else {
         $email[$notify[email]] = $notify[MID];
         //print "\nThis is the url for new email\n".$url;
-        if(count($reason) > 1){
-          $url = rubybuild($merchant, $reason, $notify);
-          array_push($reason, $url);
+        if (count($reason) > 1) {
+            $url = rubybuild($merchant, $reason, $notify);
+            array_push($reason, $url);
           //print_r($reason);
         }
         $simpleArray[$notify[MID]][$i] = $reason;
@@ -247,7 +252,7 @@ foreach ($notification as $notify) {
 echo "Going to add things to mail.";
 
 foreach ($simpleArray as $notify) {
-
+    print_r($notify);
   //setup interactive bootstrap email enviorment for email compatability across browsers
 
   //---NOTICE:DO NOT ADD JAVASCRIPT TO THIS IT WILL BE MARKED UNDER SPAM AND KILLED
@@ -260,83 +265,71 @@ foreach ($simpleArray as $notify) {
 
   <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap-theme.min.css" integrity="sha384-rHyoN1iRsVXV4nD0JutlnGaslCJuC7uwjduW9SVrLvRYooPp2bWYgmgJQIXwl/Sp" crossorigin="anonymous">';
 
-  $body.="<h3>Dispute Notification(s) ".date('m/d/Y')."</h3>";//ADD mid here later
+    $body.="<h3>Dispute Notification(s) ".date('m/d/Y')."</h3>";//ADD mid here later
 
   $MID="";
 
   //Build class for mysql rows table and grab headers from chargebacks
+    $body.='<div class="table-responsive">';
 
-  if (mysqli_num_rows($result2)) {
-      $body.='<div class="table-responsive">';
+    $body.= '<table cellpadding="0" cellspacing="0" class="db-table, table, table-striped, table-condensed" style="width:100%;  border: 1px solid black;">';
 
-      $body.= '<table cellpadding="0" cellspacing="0" class="db-table, table, table-striped, table-condensed" style="width:100%;  border: 1px solid black;">';
+    $body.='<tr style="border: 1px solid black; text-align:center;">';
 
-      $body.='<tr style="border: 1px solid black; text-align:center;">';
+    foreach ($tableHeader as $key => $value) {
+        //print_r($value);
+        if ($value[Field] == "acquirer-reference") {
+            next($tableHeader);
+        } else {
+            $body.='<td style="border: 1px solid black;">'.ucwords(str_replace('-', ' ', $value[Field])).'</td>';
+        }
+    }
+    $body.='</tr>';
 
-      foreach ($tableHeader as $key => $value) {
-          if ($value[Field] == "acquirer-reference") {
-              next($tableHeader);
-          } else {
-              $body.='<td style="border: 1px solid black;">'.ucwords(str_replace('-', ' ', $value[Field])).'</td>';
-          }
-      }
-      $body.='<td style="border: 1px solid black;">'.ucwords('PDF').'</td>';
-
-      $body.='</tr>';
-
-        foreach ($notify as $value) {
-            $body.='<tr style="border: 1px solid black;text-align:center;">';
-            //Get chargeback code for table convert
-            $creditDefinition = $chargebackCodes[$value[7]][$value[9]];
-            $recordType = $chargebackCodes['RecCode'][$value[11]];
-            //get MID for merchant email name
-            $MID=$value[1];
-            //Flip me on to tell merchants-------------------------------------------------------------------------------------------------------------------
-            //$to=email[$value[1]];
-            echo "This is my mid for stuff: ".$MID;
-            //insert period into amount for money conversion
-            $partOne = substr($value[5], 0, strlen($value[5])-2);
-            $partTwo = substr($value[5], strlen($value[5])-2, strlen($value[5]));
-            $money = $partOne.".".$partTwo;
-            $money= floatval($money);
-            //build table for the republic
-            if(empty($value[18])){
-              echo "its missing a message. inserting blank";
-              $value[18] = TRUE;
+    foreach ($notify as $value) {
+        print_r($value);
+        $body.='<tr style="border: 1px solid black;text-align:center;">';
+          //Get chargeback code for table convert
+        $creditDefinition = $chargebackCodes[$value[7]][$value[9]];
+        $recordType = $chargebackCodes['RecCode'][$value[11]];
+          //get MID for merchant email name
+        $MID=$value[1];
+          //Flip me on to tell merchants-------------------------------------------------------------------------------------------------------------------
+          //$to=email[$value[1]];
+        echo "This is my mid for stuff: ".$MID;
+          //insert period into amount for money conversion
+        $partOne = substr($value[5], 0, strlen($value[5])-2);
+        $partTwo = substr($value[5], strlen($value[5])-2, strlen($value[5]));
+        $money = $partOne.".".$partTwo;
+        $money= floatval($money);
+          //build table for the republic
+        foreach (array_slice($value, 0, -1) as $key=>$cell) {
+            if ($cell == $value[9]) {
+                //Change definition for reason code to understandable change
+                $body.= '<td style="border: 1px solid black;">'.trim($cell).'-'.trim($creditDefinition).'</td>';
+            } elseif ($cell == $value[5]) {
+                $body.= '<td style="border: 1px solid black;">'.money_format('%i', $money).'</td>';
+            } elseif ($cell == $value[11]) {
+                $body.= '<td style="border: 1px solid black;">'.trim($cell).'-'.trim($recordType).'</td>';
+            } elseif (empty($cell)) {
+                $body.= '<td style="border: 1px solid black;"></td>';
+            } else {
+                $body.= '<td style="border: 1px solid black;">'.trim($cell).'</td>';
             }
-            if(empty($value[19])){
-              echo "its missing a url. inserting blank";
-              $value[19] = TRUE;
-            }
-            foreach (array_slice($value, 0, -1) as $key=>$cell) {
-                if ($cell == $value[9]) {
-                  //Change definition for reason code to understandable change
-                  $body.= '<td style="border: 1px solid black;">'.trim($cell).'-'.trim($creditDefinition).'</td>';
-                } elseif ($cell == $value[5]) {
-                    $body.= '<td style="border: 1px solid black;">'.money_format('%i', $money).'</td>';
-                } elseif ($cell == $value[11]) {
-                    $body.= '<td style="border: 1px solid black;">'.trim($cell).'-'.trim($recordType).'</td>';
-                } else {
-                    $body.= '<td style="border: 1px solid black;">'.trim($cell).'</td>';
-                }
-                if($cell){
-                  $body.= '<td style="border: 1px solid black;">'.'</td>';
-                }
-            }
+        }
 
-                $body.= '</tr>';
-            }
+        $body.= '</tr>';
+    }
 
-      $body.= '</table><br />';
+    $body.= '</table><br />';
 
-      $body.='</div>';
+    $body.='</div>';
 
-      $body.= '<p>For further information about this Dispute Notification please go to <a href="http://dashboard.paymentportal.us">http://dashboard.paymentportal.us</a></p><br />';
-  }
+    $body.= '<p>For further information about this Dispute Notification please go to <a href="http://dashboard.paymentportal.us">http://dashboard.paymentportal.us</a></p><br />';
 
-  mysqli_free_result($result2);
+    mysqli_free_result($result2);
 
-    $body.='</body></html>';
+    $body.='<p>Disclaimer: You are receiving this notice as a value-added service provided by Frontline Processing. You should response to every chargeback and retrieval advice you receive by U.S. Mail, whether or not a chargeback appears on this report. Additionally, advice letters on this value-added service may be slightly different from the ones received via U.S. Mail, which may include additional documents from the card issuer. </p></body></html>';
 
     echo "Grabbed new people to notify \r\n";
 
