@@ -26,7 +26,7 @@ while (($datarow = fgets($auth_csv, 4096)) != false) {
   }
   $datarow = implode(",",$fixUpload);
 
-        $sql = 'INSERT INTO authorizations VALUES ( '. $datarow.' )';
+        $sql = 'INSERT ignore INTO authorizations VALUES ( '. $datarow.' )';
         if ($mariadb->real_query($sql) === true) {
             echo "New record created successfully \r\n";
         } else {
@@ -93,7 +93,7 @@ while (($datarow = fgets($achs_csv, 4096)) != false) {
   //fill empty rows with empty something
 
   foreach ($fixUpload as $item => $value) {
-      print_r($fixUpload);
+      //print_r($fixUpload);
       if (empty($value) or $fixUpload[$item] == '') {
           $fixUpload[$item] = '""';
       }
@@ -196,7 +196,7 @@ while (($datarow = fgets($chargeback_csv, 4096)) != false) {
 
 
         $sql = 'INSERT INTO chargebacks('.implode(",", $headers).') VALUES ( '. $datarow.' )';
-
+        print_r($sql);
         if ($mariadb->query($sql) === true) {
             echo "New record created successfully \r\n";
         } else {

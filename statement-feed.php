@@ -12,6 +12,10 @@ $undesirables = array("\n", "\r","\t","\e","\f",",");
  // qryMthDep1 StatementReport6101Frontline StatementReport6101FrontlineMNA tblCPDiscountEOM tblFlexFees
 $path=getcwd();
 
+$date = new DateTime();
+$date->modify("last day of previous month");
+echo $date->format("Y-m-d");
+
 $monthlyDescriptors = fopen($path.'/statements/MonthDescriptors.csv', 'r');
 echo $monthlyDescriptors."\r\n";
 $counter = 0;
@@ -154,7 +158,7 @@ while (($datarow = fgetcsv($StatementReport6101Frontline, 4096, ",")) != false) 
 
 
 
-        $sql = 'INSERT ignore INTO StatementReport6101Frontline('.implode(",", $headers).') VALUES ( '. $data.' )';
+        $sql = 'INSERT ignore INTO StatementReport6101Frontline('.implode(",", $headers).') VALUES ( '.($date->format("Y-m-d")).','. $data.' )';
         if ($mariadb->real_query($sql)) {
             echo "New record created successfully \r\n";
         } else {
@@ -197,7 +201,7 @@ while (($datarow = fgetcsv($StatementReport6101FrontlineMNA, 4096, ",")) != fals
 
 
 
-        $sql = 'INSERT ignore INTO StatementReport6101FrontlineMNA('.implode(",", $headers).') VALUES ( '. $data.' )';
+        $sql = 'INSERT ignore INTO StatementReport6101FrontlineMNA('.implode(",", $headers).') VALUES ( '.($date->format("Y-m-d")).",".$data.' )';
         if ($mariadb->real_query($sql)) {
             echo "New record created successfully \r\n";
         } else {
@@ -243,7 +247,7 @@ while (($datarow = fgetcsv($tblCPDiscountEOM, 4096, ",")) != false) {
 
   //print $data."\n";
 
-        $sql = 'INSERT ignore INTO tblCPDiscountEOM('.implode(",", $headers).') VALUES ( '. $data.' )';
+        $sql = 'INSERT ignore INTO tblCPDiscountEOM('.implode(",", $headers).') VALUES ( '.($date->format("Y-m-d")).",". $data.' )';
         if ($mariadb->real_query($sql)) {
             echo "New record created successfully \r\n";
         } else {
@@ -289,7 +293,7 @@ while (($datarow = fgetcsv($tblFlexFees, 4096, ",")) != false) {
 
   //print $data."\n";
 
-        $sql = 'INSERT ignore INTO tblFlexFees('.implode(",", $headers).') VALUES ( '. $data.' )';
+        $sql = 'INSERT ignore INTO tblFlexFees('.implode(",", $headers).') VALUES ( '.($date->format("Y-m-d")).",". $data.' )';
         if ($mariadb->real_query($sql)) {
             echo "New record created successfully \r\n";
         } else {
