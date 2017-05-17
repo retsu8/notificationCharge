@@ -208,6 +208,6 @@ while (($datarow = fgets($chargeback_csv, 4096)) != false) {
     $counter++ ;
 }
 
-echo $counter." rows added to chargebacks table.\r\n";
+echo $counter-1." rows added to chargebacks table.\r\n";
 
 fclose($chargeback_csv);

@@ -1,66 +1,15 @@
 <?php
-//setup google drive
-require_once __DIR__ . '/vendor/autoload.php';
 
-define('APPLICATION_NAME', 'Drive API');
-define('CREDENTIALS_PATH', '~/.credentials/drive-chargeback.json');
-define('CLIENT_SECRET_PATH', __DIR__ . '/client_secret.json');
-// If modifying these scopes, delete your previously saved credentials
-// at ~/.credentials/drive-php-quickstart.json
-define('SCOPES', implode(' ', array(
-  Google_Service_Drive::DRIVE_METADATA_READONLY)
-));
+$masterID = '0B7PSHsdd0u-CcThjazNVMnZ5Wms';
+$folderID = '';
 
-if (php_sapi_name() != 'cli') {
-  throw new Exception('This application must be run on the command line.');
-}
-
-function getClient() {
-  $client = new Google_Client();
-  $client->setApplicationName(APPLICATION_NAME);
-  $client->setScopes(SCOPES);
-  $client->setAuthConfig(CLIENT_SECRET_PATH);
-  $client->setAccessType('offline');
-
-  // Load previously authorized credentials from a file.
-  $credentialsPath = expandHomeDirectory(CREDENTIALS_PATH);
-  if (file_exists($credentialsPath)) {
-    $accessToken = json_decode(file_get_contents($credentialsPath), true);
-  } else {
-    // Request authorization from the user.
-    $authUrl = $client->createAuthUrl();
-    printf("Open the following link in your browser:\n%s\n", $authUrl);
-    print 'Enter verification code: ';
-    $authCode = trim(fgets(STDIN));
-
-    // Exchange authorization code for an access token.
-    $accessToken = $client->fetchAccessTokenWithAuthCode($authCode);
-
-    // Store the credentials to disk.
-    if(!file_exists(dirname($credentialsPath))) {
-      mkdir(dirname($credentialsPath), 0700, true);
-    }
-    file_put_contents($credentialsPath, json_encode($accessToken));
-    printf("Credentials saved to %s\n", $credentialsPath);
-  }
-  $client->setAccessToken($accessToken);
-
-  // Refresh the token if it's expired.
-  if ($client->isAccessTokenExpired()) {
-    $client->fetchAccessTokenWithRefreshToken($client->getRefreshToken());
-    file_put_contents($credentialsPath, json_encode($client->getAccessToken()));
-  }
-  return $client;
-}
-
-// Get the API client and construct the service object.
-$client = getClient();
-$service = new Google_Service_Drive($client);
-
+print_r($file);
 //Build upload function for pdf
-function upload($content, $name, $location){
+function upload($content, $name, $location)
+{
     $fileMetadata = new Google_Service_Drive_DriveFile(array(
-    'name' => $name));
+    'name' => $name,
+    'mimeType' => 'application/pdf'));
     $content = file_get_contents($location);
     $upload = $driveService->files->create($fileMetadata, array(
     'data' => $content,
@@ -71,29 +20,35 @@ function upload($content, $name, $location){
     return $upload->id;
 }
 //Create folders
-function createFolder($name, $location){
+function createFolder($name, $location)
+{
     $fileMetadata = new Google_Service_Drive_DriveFile(array(
-      'parents' => array($location),
       'name' => $name,
+      "parents" => array($location),
       'mimeType' => 'application/vnd.google-apps.folder'));
     $file = $driveService->files->create($fileMetadata, array(
       'fields' => 'id'));
+    print_r($file);
+      echo "I made it";
+      print_r(error_get_last());
     printf("Folder ID: %s\n", $file->id);
     return $upload->id;
 }
+
 //Connect to database for cahrgebacks
 $mariadb = new mysqli("merchdb.c0v9kpl8n2zi.us-west-2.rds.amazonaws.com", "merch_admin", "T7ToogA#36u#UWbV", "druporta_tss_data");
 $chargDatabase = new mysqli("merchdb.c0v9kpl8n2zi.us-west-2.rds.amazonaws.com", "merch_admin", "T7ToogA#36u#UWbV", "chargebackNotifications");
 
 if ($mariadb->connect_error) {
     echo "Failed to connect to MySQL: (" . $mariadb->connect_errno . ") " . $mariadb->connect_error;
-}
-if (mysqli_connect_errno()) {
-    echo "Failed to connect to MySQL: (" . mysqli_connect_errno() . ") ";
-    mysqli_free_result($result);
     mysqli_close($mariadb);
 }
+if ($chargDatabase->connect_error) {
+    echo "Failed to connect to MySQL: (" . $chargDatabase->connect_errno . ") " . $chargDatabase->connect_error;
+    mysqli_close($chargDatabase);
+}
 mysqli_ssl_set($mariadb, null, "certs.pem", "certs.pem", null, null);
+mysqli_ssl_set($chargDatabase, null, "certs.pem", "certs.pem", null, null);
 
 //setup variables for messaging
 $to = "wjp@frontlineprocessing.com";
@@ -107,30 +62,25 @@ $invalid_characters = array("$",",", "%", "#", "<", ">", "|");
 
 $builder = array("Processing Date", "MID","Merchant-Name","Tran-type","tran-identifier","amount","case-number","card-type","dbcr-indicator","reason-code","reason-desc","record-type","auth-code","card-number","reference-number","bin-ica","transaction-date","acquirer-reference");
 
-
-$sql = 'select * from druporta_tss_data.notifications where `notified` != 0';
-$profile = mysqli_query($mariadb, "select * from druporta_tss_data.mrchprofile");
-$result=mysqli_query($mariadb, $sql);
+$result=mysqli_query($mariadb, 'select * from druporta_tss_data.notifications where `notified` != 0');
 mysqli_query($mariadb, "update druporta_tss_data.notifications set notified=1 where notified = 0");
 $notification = mysqli_fetch_all($result, MYSQLI_BOTH);
 $result2 = mysqli_query($mariadb, 'SHOW COLUMNS FROM chargebacks') or die('cannot show columns from '.$table);
 $tableHeader = mysqli_fetch_all($result2, MYSQLI_BOTH);
-$mrchprofile = mysqli_fetch_all($profile, MYSQLI_BOTH);
+$mrchprofile = mysqli_fetch_all(mysqli_query($mariadb, "select * from druporta_tss_data.mrchprofile"), MYSQLI_BOTH);
 $count = 0;
 mysqli_free_result($result);
-mysqli_free_result($profile);
 mysqli_free_result($result2);
 
 //build table variables for getting information
 $table = "notifications";
-$masterID = '0B7PSHsdd0u-CcThjazNVMnZ5Wms';
-$folderID = '';
 
 //chargeback codes for all magor credit companies and there explanation
 $refcodes = 'select * from druporta_tss_data.chargeback_reference_codes';
 $chargebackCodes = mysqli_fetch_all(mysqli_query($mariadb, $refcodes), MYSQLI_BOTH);
 
-function rubybuild($merchant, $reason, $notify){
+function rubybuild($merchant, $reason, $notify)
+{
     print "Made it";
     $merchant['street'] = str_replace($invalid_characters, " ", $merchant['street']);
     $buildRuby ='"'.trim($reason[7]).','.$reason[5].','.$merchant['merchant-name'].','.$merchant['street'].','.$merchant['city'].','.$merchant['state'].','.$merchant['zip'].','.$reason[5].','.$reason[5].','.$reason[11].','.$chargebackCodes[$reason[7]][$reason[9]].','.''.','.$reason[16].','.$reason[13].','.$reason[5].','.$reason[17].','.''.','.$reason[14].','.$reason[11].'"';
@@ -159,6 +109,24 @@ function rubybuild($merchant, $reason, $notify){
     //print($url[1]);
     return $url[1];
 }
+
+//call to creat the current mid folder and year
+function createMID($mid)
+{
+    $folderID = createFolder($mid, $masterID);
+    $createFolder = 'INSERT into `midFolderID`(`mid`,`folderID`) VALUES('.$notify['MID'].','.$folderID.') ON DUPLICATE KEY UPDATE';
+    mysqli_query($chargDatabase, $createFolder);
+    return $folderID;
+}
+//call to create the year
+function createYear($id, $year, $month)
+{
+    $yearID = createFolder($year, $id);
+    $monthID = createFolder($month, $yearID);
+    $createFolder = 'INSERT into `'.$mid.'-folderID`(`YEAR`,`'.date('M').'`) VALUES('.$yearID.','.$monthID.') ON DUPLICATE KEY UPDATE';
+    mysqli_query($chargDatabase, $createFolder);
+    return $monthID;
+}
 //build an array to hold all notifications for multiple notifications per merchant, so they get a table instead of a ton of emails
 $simpleArray=array();
 $email= array();
@@ -169,19 +137,18 @@ chdir('pdfParser');
 foreach ($notification as $notify) {
     //print_r($notify);
     $merchant ="";
-
-    $chargebacks = 'select * from druporta_tss_data.chargebacks where ID='.$notify[chargebackID];
+    $chargebacks = 'select * from druporta_tss_data.chargebacks where ID='.$notify['chargebackID'];
     $dispute = mysqli_fetch_all(mysqli_query($mariadb, $chargebacks), MYSQLI_BOTH);
     $reason= $dispute[0];
     //print_r($reason);
     //Get the merchant to cantact
     foreach ($mrchprofile as $mrch) {
-        if (array_search($notify[MID], $mrch)) {
+        if (array_search($notify['MID'], $mrch)) {
             $merchant = $mrch;
             break;
         }
     }
-    if (in_array($notify[MID], $simpleArray)) {
+    if (in_array($notify['MID'], $simpleArray)) {
         print "Made it to mid";
         print_r($simpleArray);
         if (count($reason) > 1) {
@@ -189,20 +156,35 @@ foreach ($notification as $notify) {
             array_push($reason, $url);
           //print_r($reason);
         }
-        array_push($simpleArray[$notify[MID]][$i], $reason);
+        array_push($simpleArray[$notify['MID']][$i], $reason);
         $i++;
     } else {
-        print "Made it to email";
-        $email[$notify[email]] = $notify[MID];
-        $simpleArray[$notify[MID]] = $notify[MID];
-        $crTbMID = 'CREATE TABLE IF NOT EXISTS `'.$notify[MID].'-folderID`(`year` DATE NOT NULL, `JAN` VARCHAR(50), `FEB` VARCHAR(50),`MAR` VARCHAR(50),`APR` VARCHAR(50),`MAY` VARCHAR(50),`JUN` VARCHAR(50),`JUL` VARCHAR(50),`AUG` VARCHAR(50),`SEP` VARCHAR(50),`OCT` VARCHAR(50),`NOV` VARCHAR(50),`DEC` VARCHAR(50), UNIQUE KEY(year))';
-        $dispute = mysqli_fetch_all(mysqli_query($chargDatabase, $crTbMID), MYSQLI_BOTH);
-        $folderID = createFolder($notify[MID],$masterID);
-        $createFolder = 'INSERT into `'.$notify[MID].'-folderID`('.date('l',strtotime(date('Y-01-01'))).','.date('M').') VALUES('.$folderID.') ON DUPLICATE KEY UPDATE';
-        echo $createFolder;
-        mysqli_fetch_all(mysqli_query($chargDatabase, $createFolder), MYSQLI_BOTH);
-        print_r($simpleArray);
-        print_r($reason[0]);
+        //print "Made it to email";
+        $email[$notify['email']] = $notify['MID'];
+        $simpleArray[$notify['MID']] = $notify['MID'];
+        $crTbMID = 'CREATE TABLE `'.$notify['MID'].'-folderID`(`date` DATE NOT NULL,`YEAR` VARCHAR(50), `JAN` VARCHAR(50), `FEB` VARCHAR(50),`MAR` VARCHAR(50),`APR` VARCHAR(50),`MAY` VARCHAR(50),`JUN` VARCHAR(50),`JUL` VARCHAR(50),`AUG` VARCHAR(50),`SEP` VARCHAR(50),`OCT` VARCHAR(50),`NOV` VARCHAR(50),`DEC` VARCHAR(50), UNIQUE KEY(year))';
+        if (mysqli_query($chargDatabase, $crTbMID)) {
+            print "New table crteated";
+        } else {
+            $findMID = 'Select * from chargebackNotifications.midFolderID where mid = '.$notify['MID'];
+            $midFound = mysqli_fetch_all(mysqli_query($chargDatabase, $findMID), MYSQLI_BOTH);
+            if (empty($midFound)) {
+                $folderID = createFolder($notify['MID'], $masterID);
+            } else {
+                $findMonthID = 'Select * from `'.$notify['MID'].'-folderID` where YEAR(`date`) like YEAR("'.date("Y-01-01").'")';
+                $success = mysqli_fetch_all(mysqli_query($chargDatabase, $findMonthID), MYSQLI_ASSOC);
+                print_r($success);
+                if (empty($success)) {
+                    $monthID = createYear($folderID, date("Y"), date("M"));
+                }
+            }
+            print("This is the success ".$success);
+        }
+        $crtFileID = 'CREATE TABLE `'.$notify['MID'].'-fileID(`Date` DATE NOT NULL, `name` VARCHAR(50), ID INT(11), fileID VARCHAR(50), MID VARCHAR(50))';
+        if (mysqli_query($chargDatabase, $crtFileID)) {
+            $folderID = createFolder($notify['MID']);
+            $monthID = createYear($folderID, date("Y"), date("M"));
+        }
         //print "\nThis is the url for new email\n".$url;
         if (count($reason) > 1) {
             print_r($reason);
@@ -210,7 +192,7 @@ foreach ($notification as $notify) {
             array_push($reason, $url);
           //print_r($reason);
         }
-        $simpleArray[$notify[MID]][$i] = $reason;
+        $simpleArray[$notify['MID']][$i] = $reason;
         $i++;
     }
 }$i=0;
@@ -252,10 +234,10 @@ foreach ($simpleArray as $notify) {
 
     foreach ($tableHeader as $key => $value) {
         //print_r($value);
-        if ($value[Field] == "acquirer-reference") {
+        if ($value['Field'] == "acquirer-reference") {
             next($tableHeader);
         } else {
-            $body.='<td style="border: 1px solid black;">'.ucwords(str_replace('-', ' ', $value[Field])).'</td>';
+            $body.='<td style="border: 1px solid black;">'.ucwords(str_replace('-', ' ', $value['Field'])).'</td>';
         }
     }
     $body.='</tr>';
@@ -316,6 +298,8 @@ foreach ($simpleArray as $notify) {
     $count++;
 }
 
+
+print_r(error_get_last());
 mysqli_free_result($result);
 
 mysqli_close($mariadb);
