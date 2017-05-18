@@ -3,38 +3,6 @@
 $masterID = '0B7PSHsdd0u-CcThjazNVMnZ5Wms';
 $folderID = '';
 
-print_r($file);
-//Build upload function for pdf
-function upload($content, $name, $location)
-{
-    $fileMetadata = new Google_Service_Drive_DriveFile(array(
-    'name' => $name,
-    'mimeType' => 'application/pdf'));
-    $content = file_get_contents($location);
-    $upload = $driveService->files->create($fileMetadata, array(
-    'data' => $content,
-    'mimeType' => 'application/pdf',
-    'uploadType' => 'multipart',
-    'fields' => 'id'));
-    printf("File ID: %s\n", $upload->id);
-    return $upload->id;
-}
-//Create folders
-function createFolder($name, $location)
-{
-    $fileMetadata = new Google_Service_Drive_DriveFile(array(
-      'name' => $name,
-      "parents" => array($location),
-      'mimeType' => 'application/vnd.google-apps.folder'));
-    $file = $driveService->files->create($fileMetadata, array(
-      'fields' => 'id'));
-    print_r($file);
-      echo "I made it";
-      print_r(error_get_last());
-    printf("Folder ID: %s\n", $file->id);
-    return $upload->id;
-}
-
 //Connect to database for cahrgebacks
 $mariadb = new mysqli("merchdb.c0v9kpl8n2zi.us-west-2.rds.amazonaws.com", "merch_admin", "T7ToogA#36u#UWbV", "druporta_tss_data");
 $chargDatabase = new mysqli("merchdb.c0v9kpl8n2zi.us-west-2.rds.amazonaws.com", "merch_admin", "T7ToogA#36u#UWbV", "chargebackNotifications");
@@ -81,6 +49,7 @@ $chargebackCodes = mysqli_fetch_all(mysqli_query($mariadb, $refcodes), MYSQLI_BO
 
 function rubybuild($merchant, $reason, $notify)
 {
+    chdir('pdfParser');
     print "Made it";
     $merchant['street'] = str_replace($invalid_characters, " ", $merchant['street']);
     $buildRuby ='"'.trim($reason[7]).','.$reason[5].','.$merchant['merchant-name'].','.$merchant['street'].','.$merchant['city'].','.$merchant['state'].','.$merchant['zip'].','.$reason[5].','.$reason[5].','.$reason[11].','.$chargebackCodes[$reason[7]][$reason[9]].','.''.','.$reason[16].','.$reason[13].','.$reason[5].','.$reason[17].','.''.','.$reason[14].','.$reason[11].'"';
@@ -89,17 +58,14 @@ function rubybuild($merchant, $reason, $notify)
     $time = DateTime::createFromFormat('Y-j-m', (string)$reason[16]);
     //echo $time -> format('Y-m-d');
     shell_exec('ruby pdfAddition.rb '.$notify[MID].' '.$buildRuby);
-    shell_exec('drive push -no-prompt -destination chargebackPDF chargebackPDF/'.$notify[MID].'/'.$year.'/'.$month.'/card'.$reason[13].'reference'.$reason[17].'.pdf');
     $year = $time-> format('Y');
     $month = $time-> format('F');
-    chdir('chargebackPDF');
-    //print 'chargebackPDF/'.$notify[MID].'/'.$year.'/'.$month.'/card'.$reason[13].'reference'.$reason[17].'.pdf\n';
-    $url = shell_exec('drive url chargebackPDF/'.$notify[MID].'/'.$year.'/'.$month.'/card'.$reason[13].'reference'.$reason[17].'.pdf');
-    shell_exec('drive share -with-link chargebackPDF/'.$notify[MID].'/'.$year.'/'.$month.'/card'.$reason[13].'reference'.$reason[17].'.pdf');
-    chdir('../');
-    $url = explode(" ", $url);
+    $name = 'card'.$reason[13].'reference'.$reason[17].'.pdf';
+    $location = 'chargebackPDF/'.$notify[MID].'/'.$year.'/'.$month.'/'+$name;
+    $url = uploadFile($name, $folderID, $location);
     //$updateQueary = 'update notifications set url="'.trim($url[1]).'", notified="1" where MID like "'.trim($notify[MID]).'" and block like  "%'.$reason[13]."%".$reason[17].'%"';
-    $updateQueary = 'select * from notifications where MID like "'.trim($notify[MID]).'" and block like  "%'.$reason[13]."%".$reason[17].'%"';
+    $chargebacks = 'insert into druporta_tss_data.chargebacks set fileID="'.$url.'" where ID='.$notify['chargebackID'];
+    $dispute = mysqli_fetch_all(mysqli_query($mariadb, $chargebacks), MYSQLI_BOTH);
     if (mysqli_query($mariadb, $updateQueary)=== true) {
         echo "notification set and url created";
     } else {
@@ -107,7 +73,20 @@ function rubybuild($merchant, $reason, $notify)
       echo "Failed to update";
     }
     //print($url[1]);
-    return $url[1];
+    chdir('../pdfParser');
+    return $url;
+}
+function createFolder($name, $location){
+    $findPy = "python googleDrive.py 0 ".$name." ".$location;
+    print($findPy);
+    $folderID= shell_exec($findPy);
+    print($folderID);
+    return ($folderID);
+}
+function uploadFile($name, $location, $content){
+    $findPy = "python googleDrive.py 1 ".$name." ".$location." ".$content;
+    $fileID= shell_exec($findPy);
+    return ($fileID);
 }
 
 //call to creat the current mid folder and year
@@ -132,7 +111,6 @@ $simpleArray=array();
 $email= array();
 $i=0;
 
-chdir('pdfParser');
 //echo "My current dir is".getcwd();
 foreach ($notification as $notify) {
     //print_r($notify);
@@ -168,12 +146,18 @@ foreach ($notification as $notify) {
         } else {
             $findMID = 'Select * from chargebackNotifications.midFolderID where mid = '.$notify['MID'];
             $midFound = mysqli_fetch_all(mysqli_query($chargDatabase, $findMID), MYSQLI_BOTH);
+            foreach ($midFound as $key => $value) {
+                if (empty($value)) {
+                   unset($midFound[$key]);
+                }
+            }
             if (empty($midFound)) {
                 $folderID = createFolder($notify['MID'], $masterID);
             } else {
                 $findMonthID = 'Select * from `'.$notify['MID'].'-folderID` where YEAR(`date`) like YEAR("'.date("Y-01-01").'")';
                 $success = mysqli_fetch_all(mysqli_query($chargDatabase, $findMonthID), MYSQLI_ASSOC);
                 print_r($success);
+                die("I don't talk to strangers");
                 if (empty($success)) {
                     $monthID = createYear($folderID, date("Y"), date("M"));
                 }
