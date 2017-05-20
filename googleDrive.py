@@ -3,6 +3,8 @@ import sys
 from apiclient.discovery import build
 from httplib2 import Http
 from oauth2client.service_account import ServiceAccountCredentials
+from apiclient.http import MediaFileUpload
+
 
 scopes = ['https://www.googleapis.com/auth/drive']
 
@@ -17,12 +19,9 @@ def upload(content, name, location):
       'name' : name,
       'parents': [ location ]
     }
-    media = MediaFileUpload('files/photo.jpg',
-                            mimetype='image/jpeg',
-                            resumable=True)
-    file = service.files().create(body=file_metadata,
-                                        media_body=media,
-                                        fields='id').execute()
+    print(location)
+    media = MediaFileUpload(location, mimetype='application/pdf')
+    file = service.files().create(body=file_metadata,media_body=media,fields='id').execute()
     print(file.get('id'))
     return(file.get('id'))
 
@@ -32,8 +31,7 @@ def createFolder(name, location):
       'mimeType' : 'application/vnd.google-apps.folder',
       'parents' : [location]
     }
-    file = service.files().create(body=file_metadata,
-                                        fields='id').execute()
+    file = service.files().create(body=file_metadata,fields='id').execute()
     print(file.get('id'))
     return(file.get('id'))
 
@@ -56,6 +54,7 @@ def main(argv):
     Creates a Google Drive API service object and outputs the names and IDs
     for up to 10 files.
     """
+    print ', '.join(argv)
     todo = argv[1]
     name = argv[2]
     location = argv[3]
