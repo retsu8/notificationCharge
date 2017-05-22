@@ -56,7 +56,7 @@ function rubybuild($chargebacks, $merchant, $reason, $notify,$folderID)
     $year = $time-> format('Y');
     $month = $time-> format('F');
     $name = 'card'.$reason[13].'reference'.$reason[17].'.pdf';
-    $location = 'pdfParser/chargebackPDF/'.$notify['MID'].'/'.$year.'/'.$month.'/'.$name;
+    $location = 'pdfParser/temp.pdf';
     print($location);
     $url = uploadFile($name, $folderID, $location);
     //$updateQueary = 'update notifications set url="'.trim($url[1]).'", notified="1" where MID like "'.trim($notify[MID]).'" and block like  "%'.$reason[13]."%".$reason[17].'%"';

@@ -1,5 +1,6 @@
 import json
 import sys
+import os
 from apiclient.discovery import build
 from httplib2 import Http
 from oauth2client.service_account import ServiceAccountCredentials
@@ -15,16 +16,19 @@ http_auth = credentials.authorize(Http())
 service = build('drive','v3',  credentials=credentials)
 
 def upload(content, name, location):
+    print(content)
     file_metadata = {
       'name' : name,
       'parents': [ location ]
     }
-    print(location)
-    media = MediaFileUpload(location, mimetype='application/pdf')
-    file = service.files().create(body=file_metadata,media_body=media,fields='id').execute()
-    print(file.get('id'))
-    return(file.get('id'))
-
+    media = MediaFileUpload(content, mimetype='application/pdf', resumable=True)
+    try:
+        file = service.files().create(body=file_metadata,media_body=media,fields='id').execute()
+        print(file.get('id'))
+        return(file.get('id'))
+    except:
+        e = sys.exc_info()[0]
+        print(e)
 def createFolder(name, location):
     file_metadata = {
       'name' : name,
@@ -58,11 +62,10 @@ def main(argv):
     todo = argv[1]
     name = argv[2]
     location = argv[3]
-    if(len(argv) > 4):
+    if(len(argv) > 3):
         print(argv[4])
-        content = open(argv[4], "r")
+        content = argv[4]
     print(name)
-
     if(todo == '0'):
         createFolder(name, location)
     elif(todo == '1'):
