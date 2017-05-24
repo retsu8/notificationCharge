@@ -16,19 +16,13 @@ http_auth = credentials.authorize(Http())
 service = build('drive','v3',  credentials=credentials)
 
 def upload(content, name, location):
-    print(content)
     file_metadata = {
       'name' : name,
       'parents': [ location ]
     }
     media = MediaFileUpload(content, mimetype='application/pdf', resumable=True)
-    try:
-        file = service.files().create(body=file_metadata,media_body=media,fields='id').execute()
-        print(file.get('id'))
-        return(file.get('id'))
-    except:
-        e = sys.exc_info()[0]
-        print(e)
+    file = service.files().create(body=file_metadata,media_body=media,fields='id').execute()
+    print(file.get('id'))
 def createFolder(name, location):
     file_metadata = {
       'name' : name,
@@ -37,7 +31,6 @@ def createFolder(name, location):
     }
     file = service.files().create(body=file_metadata,fields='id').execute()
     print(file.get('id'))
-    return(file.get('id'))
 
 def searchDrive(name, location):
     page_token = None
@@ -58,14 +51,12 @@ def main(argv):
     Creates a Google Drive API service object and outputs the names and IDs
     for up to 10 files.
     """
-    print ', '.join(argv)
+    #print ', '.join(argv)
     todo = argv[1]
     name = argv[2]
     location = argv[3]
-    if(len(argv) > 3):
-        print(argv[4])
+    if(len(argv) > 4):
         content = argv[4]
-    print(name)
     if(todo == '0'):
         createFolder(name, location)
     elif(todo == '1'):
@@ -73,6 +64,6 @@ def main(argv):
     elif(todo == '2'):
         searchDrive(name, location)
     else:
-        print("Invalid todo needs a todo to to-do")
+        print("ERROR")
 if __name__ == '__main__':
     main(sys.argv)

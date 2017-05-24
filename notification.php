@@ -30,60 +30,47 @@ $invalid_characters = array("$",",", "%", "#", "<", ">", "|");
 
 $builder = array("Processing Date", "MID","Merchant-Name","Tran-type","tran-identifier","amount","case-number","card-type","dbcr-indicator","reason-code","reason-desc","record-type","auth-code","card-number","reference-number","bin-ica","transaction-date","acquirer-reference");
 
-$result=mysqli_query($mariadb, 'select * from druporta_tss_data.notifications where `notified` != 0');
-mysqli_query($mariadb, "update druporta_tss_data.notifications set notified=1 where notified = 0");
-$notification = mysqli_fetch_all($result, MYSQLI_BOTH);
 $result2 = mysqli_query($mariadb, 'SHOW COLUMNS FROM chargebacks') or die('cannot show columns from '.$table);
 $tableHeader = mysqli_fetch_all($result2, MYSQLI_BOTH);
 $mrchprofile = mysqli_fetch_all(mysqli_query($mariadb, "select * from druporta_tss_data.mrchprofile"), MYSQLI_BOTH);
 $count = 0;
-mysqli_free_result($result);
 mysqli_free_result($result2);
 
 //build table variables for getting information
 $table = "notifications";
 
-function rubybuild($chargebacks, $merchant, $reason, $notify,$folderID)
+function rubybuild($merchant, $chargeback, $notify, $folderID)
 {
     $merchant['street'] = str_replace($invalid_characters, " ", $merchant['street']);
-    $buildRuby ='"'.trim($reason[7]).','.$reason[5].','.$merchant['merchant-name'].','.$merchant['street'].','.$merchant['city'].','.$merchant['state'].','.$merchant['zip'].','.$reason[5].','.$reason[11].','.$reason[10].','.trim($reason[18]).','.$reason[16].','.$reason[13].','.$reason[17].','.$reason[20].','.$reason[14].','.$reason[11].'"';
-    $time = DateTime::createFromFormat('Y-m-j', $reason[16]);
+    $buildRuby ='"'.trim($chargeback[7]).','.$chargeback[5].','.$merchant['merchant-name'].','.$merchant['street'].','.$merchant['city'].','.$merchant['state'].','.$merchant['zip'].','.$chargeback[5].','.$chargeback[11].','.$chargeback[10].','.trim($chargeback[18]).','.$chargeback[16].','.$chargeback[13].','.$chargeback[17].','.$chargeback[20].','.$chargeback[14].','.$chargeback[11].'"';
+    $time = DateTime::createFromFormat('Y-m-j', $chargeback[16]);
     //echo $time -> format('Y-m-d');
     chdir('pdfParser');
-    $runruby = 'ruby pdfAddition.rb '.$notify['MID'].' '.$buildRuby;
+    $runruby = 'ruby pdfAddition.rb '.$notify.' '.$buildRuby;
     shell_exec($runruby);
     chdir('../');
     $year = $time-> format('Y');
     $month = $time-> format('F');
-    $name = 'card'.$reason[13].'reference'.$reason[17].'.pdf';
-    $location = 'pdfParser/temp.pdf';
-    print($location);
+    $name = 'card'.$chargeback[13].'reference'.$chargeback[17].'.pdf';
+    $location = 'pdfParser/finish.pdf';
+    //print($location);
     $url = uploadFile($name, $folderID, $location);
-    //$updateQueary = 'update notifications set url="'.trim($url[1]).'", notified="1" where MID like "'.trim($notify[MID]).'" and block like  "%'.$reason[13]."%".$reason[17].'%"';
-    $chargebacks = 'insert into druporta_tss_data.chargebacks set fileID="'.$url.'" where ID='.$notify['chargebackID'];
-    $dispute = mysqli_fetch_all(mysqli_query($mariadb, $chargebacks), MYSQLI_BOTH);
-    if (mysqli_query($mariadb, $updateQueary)=== true) {
-        echo "notification set and url created";
-    } else {
-        //echo $updateQueary;
-      echo "Failed to update";
-    }
     //print($url[1]);
     return $url;
 }
 function createFolder($name, $location){
-    print "Name ".$name." Location".$location;
-    $findPy = "python googleDrive.py 0 ".$name." ".$location;
+    $findPy = "python2.7 googleDrive.py 0 ".$name." ".$location;
     print $findPy;
     $folderID= shell_exec($findPy);
-    return $folderID;
+    print "This is the return from folder ".$folderID;
+    return trim($folderID);
 }
 function uploadFile($name, $location, $content){
-    print "Name ".$name." Location".$location." Content".$content;
-    $findPy = "python googleDrive.py 1 ".$name." ".$location." ".$content;
+    $findPy = "python2.7 googleDrive.py 1 ".$name." ".$location." ".$content;
     print $findPy;
     $fileID= shell_exec($findPy);
-    return $fileID;
+    print "This is the return from file ".$fileID;
+    return trim($fileID);
 }
 
 //call to creat the current mid folder and year
@@ -91,18 +78,34 @@ function createMID($masterID, $mid)
 {
     print "Create the mid folder";
     $folderID = createFolder($mid, $masterID);
-    $createFolder = 'INSERT into `midFolderID`(`mid`,`folderID`) VALUES('.$mid.','.$folderID.') ON DUPLICATE KEY UPDATE';
+    $createFolder = 'INSERT ignore into `midFolderID`(`mid`,`folderID`) VALUES('.$mid.','.$folderID.')';
     mysqli_query($chargDatabase, $createFolder);
     return $folderID;
 }
 //call to create the year
-function createYear($id, $year, $month)
+function createYear($chargDatabase, $fileID, $id, $year, $month, $mid)
 {
     print "Create the yearmonth folder";
-    $yearID = createFolder($year, $id);
-    $monthID = createFolder($month, $yearID);
-    $createFolder = 'INSERT into `'.$mid.'-folderID`(`YEAR`,`'.date('M').'`) VALUES('.$yearID.','.$monthID.') ON DUPLICATE KEY UPDATE';
-    mysqli_query($chargDatabase, $createFolder);
+    if(empty($fileID)){
+      if(createTable($chargDatabase, $mid)){
+        $yearID = createFolder($year, $id);
+        print "Table inserted"
+      }
+    }
+    else{
+      $yearID = $fileID['YEAR'];
+    }
+    if(empty($fileID[strtoupper(date('M'))])){
+      $monthID = createFolder($month, $yearID);
+      if(checkDB($chargDatabase, 'INSERT into `'.$mid.'-folderID`(`YEAR`,`'.strtoupper(date('M')).'`) VALUES("'.$yearID.'","'.$monthID.'") ON DUPLICATE KEY UPDATE `'.strtoupper(date('M')).'` = "'.$monthID.'"')){
+          print "Inserted the month";
+      }
+      else{
+        die("Failed to insert the request");
+      }
+    }else{
+        $monthID = $fileID[strtoupper(date('M'))];
+    }
     return $monthID;
 }
 //clean Array
@@ -124,11 +127,12 @@ function createTable($chargDatabase, $mid){
 }
 function findMID($chargDatabase, $mid, $masterID){
   $foldID = "";
-  $findMID = 'Select * from chargebackNotifications.midFolderID where mid = '.$mid;
-  $midFound = mysqli_fetch_all(mysqli_query($chargDatabase, $findMID), MYSQLI_BOTH);
-  $midFound = cleanArray($midFound);
+  $midFound = getResult($chargDatabase, 'Select * from chargebackNotifications.midFolderID where mid = '.$mid);
   if (empty($midFound)) {
       $foldID = createMID($masterID, $mid);
+      if(checkDB($chargDatabase, 'insert into from chargebackNotifications.midFolderID(`mid`, `folderID`) values('.$mid.','.$folderID.')')){
+        print "added to db";
+      }
   }
   else{
     $foldID = $midFound[0]['folderID'];
@@ -136,27 +140,51 @@ function findMID($chargDatabase, $mid, $masterID){
   return $foldID;
 }
 function getMonthID($chargDatabase, $mid, $location){
-  $findMonthID = 'Select * from `'.$mid.'-folderID` where YEAR(`date`) like YEAR("'.date("Y-01-01").'")';
-  $success = mysqli_fetch_all(mysqli_query($chargDatabase, $findMonthID), MYSQLI_ASSOC);
-  $success = cleanArray($success);
-  if (empty($success)) {
-    print $location." Year ".date("Y")." Month: ".date("M");
-    $monthID = createYear($location, date("Y"), date("M"));
-  }
-  $crtFileID = 'CREATE TABLE `'.$mid.'-fileID(`Date` DATE NOT NULL, `name` VARCHAR(50), ID INT(11), fileID VARCHAR(50), MID VARCHAR(50))';
+  print $location." Year ".date("Y")." Month: ".date("M");
+  $success = getResult($chargDatabase, 'Select * from `'.$mid.'-folderID` where YEAR(`date`) like YEAR(DATE_FORMAT(NOW() ,"%Y-01-01"))');
+  $monthID = createYear($chargDatabase, $success[0], $location, date("Y"), date("M"), $mid);
+  $crtFileID = 'CREATE TABLE `'.$mid.'-fileID`(`Date` DATE NOT NULL, `name` VARCHAR(50), ID INT(11), fileID VARCHAR(50), MID VARCHAR(50)) UNIQUE KEY(ID)';
+  print $crtFileID;
   if (mysqli_query($chargDatabase, $crtFileID)) {
-        print 'Table for '.$mid."-fileid created";
+        print 'Table for '.$mid."-fileid created \n";
+  }
+  else{
+    print 'Table already exists \n';
   }
   return $monthID;
 }
-function poscode($mariadb, $authID){
-  $getAuth = 'select * from authorizations where `auth-code`='.$authID;
-  $success = mysqli_fetch_all(mysqli_query($mariadb, $getAuth), MYSQLI_ASSOC);
+function poscode($mariadb, $authID, $mid){
+  $getAuth = 'select * from authorizations where `auth-code`="'.$authID.'" and MID="'.$mid.'"';
+  if($authID != ""){
+    $success = getResult($mariadb, $getAuth);
+  }
   if(empty($success[0])){
     return "90";
   }
   else{
     return $success[0]['pos-entry'];
+  }
+  return "90";
+}
+function getResult($db, $queary){
+  print $queary;
+  $setGet = mysqli_query($db, $queary);
+  if($setGet){
+    $result = mysqli_fetch_all($setGet, MYSQLI_BOTH);
+    mysqli_free_result($setGet);
+  }else{
+    $result = array();
+  }
+  print_r(error_get_last());
+  return $result;
+}
+function checkDB($db, $queary){
+  print $queary;
+  if(mysqli_query($db, $queary)){
+      return True;
+  }
+  else{
+    return False;
   }
 }
 //build an array to hold all notifications for multiple notifications per merchant, so they get a table instead of a ton of emails
@@ -164,73 +192,65 @@ $simpleArray=array();
 $email= array();
 $i=0;
 
+
+$id = getResult($mariadb, "select * from druporta_tss_data.chargebacks where `processing-date` BETWEEN CURDATE()-INTERVAL 1 WEEK and NOW() Group by MID");
+foreach($id as $person){
+    $midArray[$person['MID']] = $person['MID'];
+    $simpleArray[$person['MID']] = array($person['MID']);
+}
 //echo "My current dir is".getcwd();
-foreach ($notification as $notify) {
+
+foreach ($midArray as $notify) {
     $folderID = "";
     //print_r($notify);
     $merchant ="";
-    $chargebacks = 'select * from druporta_tss_data.chargebacks where ID='.$notify['chargebackID'];
-    $dispute = mysqli_fetch_all(mysqli_query($mariadb, $chargebacks), MYSQLI_BOTH);
-    $reason= $dispute[0];
-    //print_r($reason);
     //Get the merchant to cantact
     foreach ($mrchprofile as $mrch) {
-        if (array_search($notify['MID'], $mrch)) {
+        if (array_search($notify, $mrch)) {
             $merchant = $mrch;
             break;
         }
     }
-    if (in_array($notify['MID'], $simpleArray)) {
-        $findMID = 'Select * from `'.$notify['MID'].'-folderID` where YEAR(`date`) like YEAR("'.date("Y-01-01").'")';
-        $midFound = mysqli_fetch_all(mysqli_query($chargDatabase, $findMID), MYSQLI_BOTH);
-        $midFound = cleanArray($midFound);
-        print_r($midFound);
-        print "Made it to mid";
-        print_r($simpleArray);
-        if (count($reason) > 1) {
-            $getpos = poscode($mariadb, $reason[`auth-code`]);
-            array_push($reason, $getpos);
-            $reason["pos-code"] = $getpos;
-            print_r($reason);
-            $url = rubybuild($chargDatabase, $merchant, $reason, $notify, $folderID);
-            array_push($reason, $url);
-          //print_r($reason);
-        }
-        array_push($simpleArray[$notify['MID']][$i], $reason);
-        $i++;
-        print_r($simpleArray);
-    } else {
-        //print "Made it to email";
-        $email[$notify['email']] = $notify['MID'];
-        $simpleArray[$notify['MID']] = $notify['MID'];
-        $tr = createTable($chargDatabase, $notify['MID']);
-        if ($tr) {
-            print "New table crteated";
-            $folderID= findMID($chargDatabase, $notify['MID'], $masterID);
-        } else {
-            $folderID= findMID($chargDatabase, $notify['MID'], $masterID);
-            print $folderID;
-        }
-        $monthID = getMonthID($chargDatabase, $notify['MID'], $folderID);
-        //print "\nThis is the url for new email\n".$url;
-        if (count($reason) > 1) {
-            $getpos = poscode($mariadb, $reason['auth-code']);
-            array_push($reason, $getpos);
-            $reason["pos-code"] = $getpos;
-            print_r($reason);
-            $url = rubybuild($chargDatabase, $merchant, $reason, $notify, $folderID);
-            array_push($reason, $url);
-          //print_r($reason);
-        }
-        $simpleArray[$notify['MID']][$i] = $reason;
-        $i++;
-        print_r($simpleArray);
+    $dispute = getResult($mariadb, 'select * from druporta_tss_data.chargebacks where MID="'.$notify.'" and `processing-date` BETWEEN CURDATE()-INTERVAL 1 WEEK and NOW()');
+    foreach($dispute as $chargeback){
+      //print_r($chargeback);
+      $name = 'card'.$chargeback[13].'reference'.$chargeback[17].'.pdf';
+      $midFound = findMID($chargDatabase, $notify, $masterID);
+      //print "Made it to mid";
+      //print_r($simpleArray);
+      if (count($chargeback) > 1) {
+          print_r($chargeback);
+          $getpos = poscode($mariadb, $chargeback['auth-code'], $notify);
+          array_push($chargeback, $getpos);
+          $chargeback["pos-code"] = $getpos;
+          $checkID = getResult($chargDatabase, "select * from `".$notify."-fileID` where name='".$name."'");
+          if(empty($checkID)){
+            $folderID = getMonthID($chargDatabase, $notify, $midFound);
+            $url = rubybuild($merchant, $chargeback, $notify, $folderID);
+            if(checkDB($chargDatabase, 'insert into chargebackNotifications.`'.$notify.'-fileID`(`Date`, name, ID, fileID) VALUES(NOW(),"'.$name.'","'.$chargeback['ID'].'","'.$url.'") on duplicate key update fileID='.$url)){
+              print "fileID updated";
+            }
+            array_push($chargeback, $url);
+          }
+          else{
+            array_push($chargeback, $checkID['fileID']);
+          }
+        //print_r($chargeback);
+      }
+      try{
+        array_push($simpleArray[$notify], $chargeback);
+        print_r($simpleArray[$notify]);
+      }catch(Exception $e){
+        print $e;
+      }
+      $i++;
+      //print_r($simpleArray);
     }
 }$i=0;
 
 //print_r($email);
 
-//print_r($simpleArray);
+print_r($simpleArray);
 
 
 
